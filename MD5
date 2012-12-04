@@ -1,0 +1,16 @@
+0c3c955d7d975afadaa060bf57c74258 *DESCRIPTION
+bcf9e8edfba6e4442962e14dd8c2c9dd *NAMESPACE
+b389ac5c3c4dced99ffcf8ac3237a43d *NEWS
+0fed679d6aedda9015c2297418fb1619 *R/cache.R
+1e5aa12406bc97ff65694e43c9ed74f9 *R/fail.R
+49ff515432d5aa8b1f10f51f001103a1 *R/helper.R
+7adc3bffded1dfb12fd328c80440a85c *R/methods.R
+66d402c798ba06b6c745806de8bd673a *R/zzz.R
+3d7d3ca5526f9177caa05f8c7ec1fcf0 *inst/tests/test_apply.R
+a0c012827005346d931b2e9fc7e0a7ee *inst/tests/test_as_list.R
+0408668d2fb7e36d224543d0dee3b2b0 *inst/tests/test_constructor.R
+fb2501e04b43b6901c45afc1f7d7c5bc *inst/tests/test_get_put.R
+70c5261145aa5cb0e1f358f028680650 *inst/tests/test_remove.R
+5b0037f4a62cf853b3744a4905a4253c *inst/tests/test_size.R
+cec301fc439c8d8730e4c0140182317f *man/fail.Rd
+b847e8c1efd37f623058cbe27c49a8aa *tests/test_all.R
