@@ -1,81 +1,143 @@
-as.flag = function(x) {
-  if (missing(x))
+as.flag = function(x, default) {
+  if (missing(x)) {
+    if (!missing(default))
+      return(default)
     stopf("Argument %s is missing", deparse(substitute(x)))
+  }
+
   if (length(x) != 1L)
     stopf("Argument %s must have length 1", deparse(substitute(x)))
+
   if (is.logical(x)) {
     if (is.na(x))
       stopf("Argument %s may not be NA", deparse(substitute(x)))
     return(x)
   }
-  conv = try(as.logical(x), silent=TRUE)
-  if (is.error(conv) || length(conv) != 1L || is.na(conv))
+
+  x1 = try(as.logical(x), silent = TRUE)
+  if (is.error(x1) || length(x1) != 1L || is.na(x1))
     stopf("Argument %s is not convertible to a logical value", deparse(substitute(x)))
-  return(conv)
+  return(x1)
 }
 
-checkString = function(x, na.ok=FALSE) {
-  if (missing(x) || !is.character(x) || length(x) != 1L || (!na.ok && is.na(x)))
-    stopf("Argument '%s' must be a character vector of length 1", deparse(substitute(x)))
+assert.string = function(x, na.ok = FALSE) {
+  if (missing(x))
+    stopf("Argument '%s' is missing", deparse(substitute(x)))
+  if (!is.character(x))
+    stopf("Argument '%s' must be of type character", deparse(substitute(x)))
+  if (length(x) != 1L)
+    stopf("Argument '%s' must have length 1", deparse(substitute(x)))
+  if (!na.ok && is.na(x))
+    stopf("Arguments '%s' is NA", deparse(substitute(x)))
 }
 
-checkStrings = function(x, min.len=1L, na.ok=FALSE) {
-  if (missing(x) || !is.character(x) || length(x) < min.len || (!na.ok && any(is.na(x))))
-    stopf("Argument '%s' must be a character vector of length >=%i", deparse(substitute(x)), min.len)
-}
+as.keys = function(keys, len, default) {
+  if (missing(keys)) {
+    if (!missing(default))
+      return(default)
+    stop("Keys are missing")
+  }
 
-checkKeysFormat = function(keys) {
-  ok = grepl("^\\.{0,1}[[:alpha:]_]{1}[[:alnum:]._]*$", keys)
-  if (!all(ok))
-    stopf("Illegal format for keys: '%s'", collapse(keys[!ok]))
-}
+  if (!is.character(keys)) {
+    keys = try(as.character(keys))
+    if (is.error(keys))
+      stop("Keys must be of type character or be convertible to character")
+  }
 
-checkKeysDuplicated = function(keys) {
-  ok = anyDuplicated(keys)
-  if (ok > 0L)
-    stopf("Duplicated key '%s'", keys[ok])
+  if (!missing(len)) {
+    if (length(keys) != len)
+      stop("Keys must have length ", len)
+  }
+
+  if (any(is.na(keys)))
+    stop("Keys contain NAs")
+
+  # R variable pattern: "^((\\.[[:alpha:]._]+)|([[:alpha:]]+))[[:alnum:]_.]*$"
+  pattern = "^[[:alnum:]._-]+$"
+  ok = grepl(pattern, keys)
+  if (! all(ok))
+    stopf("Key '%s' in illegal format, see help", head(keys[!ok], 1L))
+
+  return(keys)
 }
 
 names2 = function(x) {
   ns = names(x)
   if (is.null(ns))
     return(rep(NA_character_, length(x)))
-  replace(ns, ns == "", NA_character_)
+  return(replace(ns, ns == "", NA_character_))
 }
 
 argsAsNamedList = function(...) {
   args = list(...)
   ns = names2(args)
   ns.missing = is.na(ns)
-  if(any(ns.missing)) {
+  if (any(ns.missing)) {
     ns.sub = as.character(substitute(deparse(...)))[-1L]
     ns[ns.missing] = ns.sub[ns.missing]
   }
-  setNames(args, ns)
+  return(setNames(args, replace(ns, ns %in% c("NA", "NULL", ""), NA_character_)))
 }
 
 simpleLoad = function(fn) {
-  ee = new.env(parent=emptyenv())
-  ns = load(fn, envir=ee)
-  if (length(ns) == 1L) {
-    ee[[ns]]
-  } else {
-    as.list(ee)
-  }
+  ee = new.env(parent = emptyenv(), hash = FALSE)
+  ns = load(fn, envir = ee)
+  if (length(ns) == 1L)
+    return(ee[[ns]])
+  return(as.list(ee))
 }
 
 simpleSave = function(fn, key, value) {
-  ee = new.env(parent=emptyenv(), hash=FALSE)
-  assign(key, value, envir=ee)
-  save(list=key, envir=ee, file=fn)
-  key
+  ee = new.env(parent = emptyenv(), hash = FALSE)
+  assign(key, value, envir = ee)
+  save(list = key, envir = ee, file = fn)
+  return(key)
 }
 
-checkCollision = function(new, existing, overwrite) {
-  found.sens = new %in% existing
-  found.insens = !found.sens & new %in% tolower(existing)
-  if (!overwrite && any(found.sens))
-    stopf("File with key '%s' already pesent and overwrite is FALSE", head(new[found.sens], 1L))
-  if (any(found.insens))
-    warningf("Keys with same (case insensitve) name already present: '%s'", collapse(new[found.insens], ", "))
+checkPath = function(path) {
+  assert.string(path)
+  if (file.exists(path)) {
+    if (!isDirectory(path))
+      stopf("Path '%s' is present but not a directory", path)
+    if (!grepl("windows", Sys.info()["sysname"], ignore.case = TRUE)) {
+      if (file.access(path, mode = 4L) != 0L)
+        stopf("Path '%s' is not readable", path)
+      if (file.access(path, mode = 2L) != 0L)
+        stopf("Path '%s' is not writeable", path)
+    }
+  } else {
+    if (!dir.create(path))
+      stopf("Could not create directory '%s'", path)
+  }
+  return(path)
+}
+
+checkExtension = function(extension) {
+  assert.string(extension)
+  if (grepl("[^[:alnum:]]", extension))
+    stop("Extension contains illegal characters: ",
+         collapse(strsplit(gsub("[[:alnum:]]", "", extension), ""), " "))
+  return(extension)
+}
+
+checkCollision = function(keys) {
+  dups = duplicated(tolower(keys))
+  if (any(dups)) {
+    warningf("The following keys would result in colliding files on case insensitive file systems: %s",
+             collapse(keys[dups]))
+  }
+}
+
+checkCollisionNew = function(new, old) {
+  dups = new %nin% old & tolower(new) %in% tolower(old)
+  if (any(dups))
+    warningf("Keys would collide on case insensitive file systems: %s", collapse(new[dups]))
+}
+
+fn2key = function(self, fn) {
+  return(sub(sprintf("\\.%s$", self$extension), "", fn))
+}
+
+key2fn = function(self, key) {
+  return(file.path(self$path, sprintf("%s.%s", key, self$extension)))
 }
