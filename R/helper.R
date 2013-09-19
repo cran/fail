@@ -1,4 +1,4 @@
-as.flag = function(x, default) {
+as.flag = function(x, default, na.ok = FALSE) {
   if (missing(x)) {
     if (!missing(default))
       return(default)
@@ -9,13 +9,13 @@ as.flag = function(x, default) {
     stopf("Argument %s must have length 1", deparse(substitute(x)))
 
   if (is.logical(x)) {
-    if (is.na(x))
+    if (!na.ok && is.na(x))
       stopf("Argument %s may not be NA", deparse(substitute(x)))
     return(x)
   }
 
   x1 = try(as.logical(x), silent = TRUE)
-  if (is.error(x1) || length(x1) != 1L || is.na(x1))
+  if (is.error(x1) || length(x1) != 1L || (!na.ok && is.na(x1)))
     stopf("Argument %s is not convertible to a logical value", deparse(substitute(x)))
   return(x1)
 }
@@ -61,45 +61,12 @@ as.keys = function(keys, len, default) {
   return(keys)
 }
 
-names2 = function(x) {
-  ns = names(x)
-  if (is.null(ns))
-    return(rep(NA_character_, length(x)))
-  return(replace(ns, ns == "", NA_character_))
-}
-
-argsAsNamedList = function(...) {
-  args = list(...)
-  ns = names2(args)
-  ns.missing = is.na(ns)
-  if (any(ns.missing)) {
-    ns.sub = as.character(substitute(deparse(...)))[-1L]
-    ns[ns.missing] = ns.sub[ns.missing]
-  }
-  return(setNames(args, replace(ns, ns %in% c("NA", "NULL", ""), NA_character_)))
-}
-
-simpleLoad = function(fn) {
-  ee = new.env(parent = emptyenv(), hash = FALSE)
-  ns = load(fn, envir = ee)
-  if (length(ns) == 1L)
-    return(ee[[ns]])
-  return(as.list(ee))
-}
-
-simpleSave = function(fn, key, value) {
-  ee = new.env(parent = emptyenv(), hash = FALSE)
-  assign(key, value, envir = ee)
-  save(list = key, envir = ee, file = fn)
-  return(key)
-}
-
 checkPath = function(path) {
   assert.string(path)
   if (file.exists(path)) {
     if (!isDirectory(path))
       stopf("Path '%s' is present but not a directory", path)
-    if (!grepl("windows", Sys.info()["sysname"], ignore.case = TRUE)) {
+    if (.Platform$OS.type != "windows") {
       if (file.access(path, mode = 4L) != 0L)
         stopf("Path '%s' is not readable", path)
       if (file.access(path, mode = 2L) != 0L)
@@ -123,7 +90,7 @@ checkExtension = function(extension) {
 checkCollision = function(keys) {
   dups = duplicated(tolower(keys))
   if (any(dups)) {
-    warningf("The following keys would result in colliding files on case insensitive file systems: %s",
+    warningf("The following keys result in colliding files on case insensitive file systems: %s",
              collapse(keys[dups]))
   }
 }
@@ -131,13 +98,19 @@ checkCollision = function(keys) {
 checkCollisionNew = function(new, old) {
   dups = new %nin% old & tolower(new) %in% tolower(old)
   if (any(dups))
-    warningf("Keys would collide on case insensitive file systems: %s", collapse(new[dups]))
+    warningf("Keys collide on case insensitive file systems: %s", collapse(new[dups]))
 }
 
-fn2key = function(self, fn) {
-  return(sub(sprintf("\\.%s$", self$extension), "", fn))
+fn2key = function(.self, fn) {
+  return(sub(sprintf("\\.%s$", .self$extension), "", fn))
 }
 
-key2fn = function(self, key) {
-  return(file.path(self$path, sprintf("%s.%s", key, self$extension)))
+key2fn = function(.self, key) {
+  return(file.path(.self$path, sprintf("%s.%s", key, .self$extension)))
+}
+
+coalesce = function(x, replacement) {
+  if (is.null(x))
+    return(replacement)
+  return(x)
 }

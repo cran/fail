@@ -11,10 +11,17 @@
 #'   Path to work in, will be created if it does not exists.
 #' @param extension [\code{character(1)}]\cr
 #'   File extension to work with.
+#'   Default is \dQuote{RData}.
 #' @param use.cache [\code{logical(1)}]\cr
 #'   Use a memory cache per global default.
 #'   Global option which can locally be overwritten in most functions.
-#' @return Object of class \code{fail}. See Details.
+#'   Default is \code{FALSE}
+#' @param simplify [\code{character(1)}]\cr
+#'   If only one object is stored in a R data file,
+#'   should the return value be simplified? 
+#'   If set to \code{TRUE},
+#'   instead of a list containing one element the object itself will be returned.
+#' @return Object of class \code{fail}. See details.
 #' @details
 #'   For a quick introduction on the usage, see \url{https://github.com/mllg/fail}.
 #'
@@ -22,6 +29,7 @@
 #'   \describe{
 #'     \item{\code{ls(pattern=NULL)}}{
 #'       Function to list keys in directory \code{path} matching a regular expression pattern \code{pattern}.
+#'       Returns a character vector of keys.
 #'     }
 #'     \item{\code{get(key, use.cache)}}{
 #'       Function to load a file identified by \code{key} from directory \code{path}.
@@ -34,9 +42,11 @@
 #'       More objects can be passed as a named list using the argument \code{li}: Each list item will be saved to a separate file.
 #'       If you provide \code{keys} as a character vector, these names will be taken for the arguments passed via \code{...}.
 #'       Argument \code{use.cache} temporarily overwrites the global \code{use.cache} flag.
+#'       Returns a character vector of stored keys.
 #'     }
 #'     \item{\code{remove(keys)}}{
 #'       Function to remove files identified by \code{keys} from directory \code{path}.
+#'       Returns a character vector of deleted keys.
 #'     }
 #'     \item{\code{apply(FUN, ..., keys, use.cache, simplify=FALSE, use.names=TRUE)}}{
 #'       Apply function \code{FUN} on files identified by \code{keys}.
@@ -62,9 +72,11 @@
 #'    \item{\code{assign(keys, envir=parent.frame(), use.cache)}}{
 #'       Assigns all objects identified by the character vector \code{keys} in the environment \code{envir}.
 #'       Argument \code{use.cache} can be set to temporarily overwrite the global \code{use.cache} flag.
+#'       Returns a character vector of assigned keys.
 #'    }
 #'    \item{\code{clear(keys)}}{
 #'       Clear the cache to free memory. \code{keys} defaults to all keys available.
+#'       Returns a character vector of cleared keys.
 #'    }
 #'    \item{\code{cached()}}{
 #'       Returns a character vector of keys of cached objects.
@@ -92,7 +104,8 @@
 #' @export
 #' @examples
 #' # initialize a FAIL in a temporary directory
-#' files <- fail(tempfile(""))
+#' path <- tempfile("")
+#' files <- fail(path)
 #'
 #' # save x and y, vectors of random numbers
 #' x <- runif(100)
@@ -101,7 +114,10 @@
 #' # save columns of the iris data set as separate files
 #' files$put(li = as.list(iris))
 #'
-#' # load an object from the file system
+#' # load all RData files in a named list as a one-liner
+#' as.list(fail(path))
+#'
+#' # load a single object from the file system
 #' files$get("Species")
 #' files$as.list(c("x", "y"))
 #'
@@ -113,7 +129,7 @@
 #' files$mapply(function(key, value) sprintf("%s -> %f", key, mean(value)), simplify = TRUE)
 #'
 #' # show file size informations
-#' files$size()
+#' files$size(unit = "Mb")
 #'
 #' # get an object and cache it
 #' files$get("x", use.cache = TRUE)
@@ -124,60 +140,16 @@
 #' # assign variables in the current environment
 #' files$assign("y")
 #' mean(y)
-fail = function(path = getwd(), extension = "RData", use.cache = FALSE) {
+fail = function(path = getwd(), extension = "RData", use.cache = FALSE, simplify = TRUE) {
   ### argument checks
-  self = list(path = checkPath(path),
-              extension = checkExtension(extension),
-              use.cache = as.flag(use.cache),
-              cache = Cache())
-  rm(path, extension, use.cache)
-  checkCollision(Ls(self))
-
-  setClasses(list(
-    ls = function(pattern = NULL) {
-      Ls(self, pattern)
-    },
-    get = function(key, use.cache) {
-      Get(self, as.keys(key, len = 1L),
-          use.cache = as.flag(use.cache, default = self$use.cache))
-    },
-    put = function(..., keys, li = list(), use.cache) {
-      Put(self, ..., keys = keys, li = as.list(li),
-          use.cache = as.flag(use.cache, default = self$use.cache))
-    },
-    remove = function(keys) {
-      Remove(self, as.keys(keys))
-    },
-    as.list = function(keys, use.cache) {
-      AsList(self, as.keys(keys, default = Ls(self)),
-             use.cache = as.flag(use.cache, default = self$use.cache))
-    },
-    apply = function(FUN, ..., keys, use.cache, simplify = FALSE, use.names = TRUE) {
-      Apply(self, FUN, ..., keys = as.keys(keys, default = Ls(self)),
-            use.cache = as.flag(use.cache, default = self$use.cache),
-            simplify = as.flag(simplify), use.names = as.flag(use.names))
-    },
-    mapply = function(FUN, ..., keys, use.cache, moreArgs = NULL, simplify = FALSE, use.names = TRUE) {
-      Mapply(self, FUN, ..., keys = as.keys(keys, default = Ls(self)),
-             use.cache = as.flag(use.cache, default = self$use.cache),
-             moreArgs = as.list(moreArgs), simplify = as.flag(simplify), use.names = as.flag(use.names))
-    },
-    assign = function(keys, envir = parent.frame(), use.cache) {
-      Assign(self, keys = as.keys(keys, default = Ls(self)), envir = as.environment(envir),
-             use.cache = as.flag(use.cache, default = self$use.cache))
-    },
-    size = function(keys, unit = "b") {
-      match.arg(unit, choices = names(UNITCONVERT))
-      Size(self, as.keys(keys, default = Ls(self)), unit = unit)
-    },
-    clear = function(keys) {
-      Clear(self, as.keys(keys, default = Ls(self)))
-    },
-    cached = function() {
-      Cached(self)
-    },
-    info = function() {
-      Info(self)
-    }
-  ), "fail")
+  .self = list(path = checkPath(path),
+               extension = checkExtension(extension),
+               use.cache = as.flag(use.cache),
+               simplify = as.flag(simplify, na.ok = TRUE),
+               cache = Cache(),
+               loadFun = loadRData, 
+               saveFun = saveRData
+               )
+  checkCollision(Ls(.self))
+  setClasses(makeObject(.self), "fail")
 }
