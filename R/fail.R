@@ -12,13 +12,16 @@
 #' @param extension [\code{character(1)}]\cr
 #'   File extension to work with.
 #'   Default is \dQuote{RData}.
+#' @param all.files [\code{logical(1)}]\cr
+#'   Also include hidden files, i.e. files whose name start with a dot (\dQuote{.}).
+#'   Default is \code{FALSE}.
 #' @param use.cache [\code{logical(1)}]\cr
 #'   Use a memory cache per global default.
 #'   Global option which can locally be overwritten in most functions.
 #'   Default is \code{FALSE}
 #' @param simplify [\code{character(1)}]\cr
 #'   If only one object is stored in a R data file,
-#'   should the return value be simplified? 
+#'   should the return value be simplified?
 #'   If set to \code{TRUE},
 #'   instead of a list containing one element the object itself will be returned.
 #' @return Object of class \code{fail}. See details.
@@ -140,16 +143,18 @@
 #' # assign variables in the current environment
 #' files$assign("y")
 #' mean(y)
-fail = function(path = getwd(), extension = "RData", use.cache = FALSE, simplify = TRUE) {
+fail = function(path = getwd(), extension = "RData", all.files = FALSE, use.cache = FALSE, simplify = TRUE) {
   ### argument checks
-  .self = list(path = checkPath(path),
-               extension = checkExtension(extension),
-               use.cache = as.flag(use.cache),
-               simplify = as.flag(simplify, na.ok = TRUE),
-               cache = Cache(),
-               loadFun = loadRData, 
-               saveFun = saveRData
-               )
+  .self = list(
+    path = checkPath(path),
+    extension = checkExtension(extension),
+    all.files = asFlag(all.files),
+    use.cache = asFlag(use.cache),
+    simplify = asFlag(simplify, na.ok = TRUE),
+    cache = Cache(),
+    loadFun = loadRData,
+    saveFun = saveRData
+  )
   checkCollision(Ls(.self))
   setClasses(makeObject(.self), "fail")
 }

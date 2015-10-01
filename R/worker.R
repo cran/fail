@@ -1,5 +1,5 @@
 Ls = function(.self, pattern = NULL) {
-  keys = fn2key(.self, list.files(.self$path, pattern = sprintf("\\.%s$", .self$extension)))
+  keys = fn2key(.self, list.files(.self$path, pattern = sprintf("\\.%s$", .self$extension), ignore.case = TRUE, all.files = .self$all.files))
   if (!is.null(pattern))
     keys = keys[grepl(pattern, keys)]
   return(keys)
@@ -12,32 +12,34 @@ Get = function(.self, key, use.cache) {
 
   if (use.cache) {
     if (!.self$cache$exists(key))
-      .self$cache$put(key, .self$loadFun(fn, .self$simplify))
+      .self$cache$put(key, .self$loadFun(.self, fn))
     return(.self$cache$get(key))
   }
-  return(.self$loadFun(fn, .self$simplify))
+  return(.self$loadFun(.self, fn))
 }
 
 Put = function(.self, ..., keys, li, use.cache) {
   args = argsAsNamedList(...)
   if (missing(keys))
     keys = names2(args)
-  keys = c(as.keys(keys, len = length(args)), as.keys(names2(li)))
+  keys = c(asKeys(.self, keys, len = length(args)), asKeys(.self, names2(li)))
   args = c(args, as.list(li))
 
-  if (any(is.na(keys)))
+  if (anyMissing(keys))
     stop("Could not determine all key names from input")
-  if (anyDuplicated(keys) > 0L)
+  if (anyDuplicated(keys))
     stop("Duplicated key names")
 
   checkCollisionNew(keys, Ls(.self))
 
   if (use.cache)
-    mapply(.self$cache$put, key = keys, value = args, USE.NAMES = FALSE, SIMPLIFY = FALSE)
+    mapply(.self$cache$put, key = keys, value = args,
+      USE.NAMES = FALSE, SIMPLIFY = FALSE)
   else
     .self$cache$rm(keys)
 
-  mapply(.self$saveFun, fn = key2fn(.self, keys), key = keys, value = args, USE.NAMES = FALSE, SIMPLIFY = FALSE)
+  mapply(.self$saveFun, fn = key2fn(.self, keys), key = keys, value = args,
+    MoreArgs = list(.self = .self), USE.NAMES = FALSE, SIMPLIFY = FALSE)
   invisible(keys)
 }
 
@@ -47,7 +49,7 @@ Remove = function(.self, keys) {
     fn = key2fn(.self, key)
     return(file.exists(fn) && file.remove(fn))
   }
-  ok = vapply(keys, w, logical(1L))
+  ok = vlapply(keys, w)
   if (!all(ok))
     warningf("Files not removed: %s", collapse(keys[!ok]))
   return(invisible(ok))
@@ -72,11 +74,7 @@ Mapply = function(.self, FUN, ..., keys, use.cache, moreArgs, simplify, use.name
       stopf("Error applying function on key '%s': %s", .key, as.character(res))
     return(res)
   }
-
-  FUN = match.fun(FUN)
-  if (!all(c("key", "value") %in% names(formals(FUN))))
-    stop("Function must have formal arguments 'key' and 'value'")
-
+  assertFunction(FUN, args = c("key", "value"))
   return(mapply(wrapper, .key = keys, ..., MoreArgs = moreArgs, USE.NAMES = use.names, SIMPLIFY = simplify))
 }
 

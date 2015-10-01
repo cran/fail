@@ -1,37 +1,14 @@
-as.flag = function(x, default, na.ok = FALSE) {
+asFlag = function(x, default, na.ok = FALSE) {
   if (missing(x)) {
     if (!missing(default))
       return(default)
     stopf("Argument %s is missing", deparse(substitute(x)))
   }
-
-  if (length(x) != 1L)
-    stopf("Argument %s must have length 1", deparse(substitute(x)))
-
-  if (is.logical(x)) {
-    if (!na.ok && is.na(x))
-      stopf("Argument %s may not be NA", deparse(substitute(x)))
-    return(x)
-  }
-
-  x1 = try(as.logical(x), silent = TRUE)
-  if (is.error(x1) || length(x1) != 1L || (!na.ok && is.na(x1)))
-    stopf("Argument %s is not convertible to a logical value", deparse(substitute(x)))
-  return(x1)
+  assertFlag(x, na.ok = na.ok, .var.name = deparse(substitute(x)))
+  x
 }
 
-assert.string = function(x, na.ok = FALSE) {
-  if (missing(x))
-    stopf("Argument '%s' is missing", deparse(substitute(x)))
-  if (!is.character(x))
-    stopf("Argument '%s' must be of type character", deparse(substitute(x)))
-  if (length(x) != 1L)
-    stopf("Argument '%s' must have length 1", deparse(substitute(x)))
-  if (!na.ok && is.na(x))
-    stopf("Arguments '%s' is NA", deparse(substitute(x)))
-}
-
-as.keys = function(keys, len, default) {
+asKeys = function(.self, keys, len, default) {
   if (missing(keys)) {
     if (!missing(default))
       return(default)
@@ -44,46 +21,35 @@ as.keys = function(keys, len, default) {
       stop("Keys must be of type character or be convertible to character")
   }
 
-  if (!missing(len)) {
-    if (length(keys) != len)
+  if (!missing(len) && length(keys) != len)
       stop("Keys must have length ", len)
-  }
-
-  if (any(is.na(keys)))
+  if (anyMissing(keys))
     stop("Keys contain NAs")
 
   # R variable pattern: "^((\\.[[:alpha:]._]+)|([[:alpha:]]+))[[:alnum:]_.]*$"
   pattern = "^[[:alnum:]._-]+$"
   ok = grepl(pattern, keys)
-  if (! all(ok))
+  if (!all(ok))
     stopf("Key '%s' in illegal format, see help", head(keys[!ok], 1L))
+  if (!.self$all.files && any(substr(keys, 1L, 1L) == "."))
+    stop("Cannot work with hidden files (files starting with a dot) if 'all.files' is set to TRUE.")
 
   return(keys)
 }
 
 checkPath = function(path) {
-  assert.string(path)
-  if (file.exists(path)) {
-    if (!isDirectory(path))
-      stopf("Path '%s' is present but not a directory", path)
-    if (.Platform$OS.type != "windows") {
-      if (file.access(path, mode = 4L) != 0L)
-        stopf("Path '%s' is not readable", path)
-      if (file.access(path, mode = 2L) != 0L)
-        stopf("Path '%s' is not writeable", path)
-    }
-  } else {
-    if (!dir.create(path))
-      stopf("Could not create directory '%s'", path)
-  }
-  return(path)
+  qassert(path, "S1")
+  if (!file.exists(path) && !dir.create(path, recursive = TRUE))
+    stopf("Could not create directory '%s'", path)
+  assertDirectory(path, access = "r")
+  path
 }
 
 checkExtension = function(extension) {
-  assert.string(extension)
+  qassert(extension, "S1")
   if (grepl("[^[:alnum:]]", extension))
     stop("Extension contains illegal characters: ",
-         collapse(strsplit(gsub("[[:alnum:]]", "", extension), ""), " "))
+      collapse(strsplit(gsub("[[:alnum:]]", "", extension), ""), " "))
   return(extension)
 }
 
@@ -91,14 +57,16 @@ checkCollision = function(keys) {
   dups = duplicated(tolower(keys))
   if (any(dups)) {
     warningf("The following keys result in colliding files on case insensitive file systems: %s",
-             collapse(keys[dups]))
+      collapse(keys[dups]))
   }
+  invisible(TRUE)
 }
 
 checkCollisionNew = function(new, old) {
   dups = new %nin% old & tolower(new) %in% tolower(old)
   if (any(dups))
     warningf("Keys collide on case insensitive file systems: %s", collapse(new[dups]))
+  invisible(TRUE)
 }
 
 fn2key = function(.self, fn) {
@@ -109,8 +77,6 @@ key2fn = function(.self, key) {
   return(file.path(.self$path, sprintf("%s.%s", key, .self$extension)))
 }
 
-coalesce = function(x, replacement) {
-  if (is.null(x))
-    return(replacement)
-  return(x)
+nkeys = function(.self) {
+  length(list.files(.self$path, pattern = sprintf("\\.%s$", .self$extension), ignore.case = TRUE, all.files = .self$all.files))
 }
